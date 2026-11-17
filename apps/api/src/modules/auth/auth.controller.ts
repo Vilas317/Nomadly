@@ -17,6 +17,8 @@ import { ACCESS_COOKIE, ACCESS_TTL_SECONDS, REFRESH_COOKIE, REFRESH_TTL_SECONDS 
 import { RegisterDto } from "./dto/register.dto";
 import { LoginDto } from "./dto/login.dto";
 import { JwtAuthGuard } from "./jwt-auth.guard";
+import { RateLimit } from "./decorators/rate-limit.decorator";
+import { AuthRateLimitGuard } from "./guards/auth-rate-limit.guard";
 
 type AuthedRequest = Request & { user: { id: string; sessionId: string } };
 
@@ -44,13 +46,26 @@ export class AuthController {
     response.clearCookie(REFRESH_COOKIE, { ...this.cookieOptions(0), maxAge: undefined });
   }
 
+  @RateLimit({
+    name: "register",
+    buckets: [{ name: "ip", identity: "ip", limit: 5, windowSeconds: 15 * 60 }],
+  })
   @Post("register")
+  @UseGuards(AuthRateLimitGuard)
   async register(@Body() body: RegisterDto) {
     return { user: await this.auth.register(body) };
   }
 
+  @RateLimit({
+    name: "login",
+    buckets: [
+      { name: "ip-email", identity: "email-ip", limit: 10, windowSeconds: 15 * 60 },
+      { name: "ip-wide", identity: "ip", limit: 50, windowSeconds: 15 * 60 },
+    ],
+  })
   @Post("login")
   @HttpCode(200)
+  @UseGuards(AuthRateLimitGuard)
   async login(
     @Body() body: LoginDto,
     @Req() request: Request,
@@ -65,8 +80,13 @@ export class AuthController {
     return { user: { id: user.id, email: user.email, profile: user.profile } };
   }
 
+  @RateLimit({
+    name: "refresh",
+    buckets: [{ name: "ip", identity: "ip", limit: 60, windowSeconds: 60 }],
+  })
   @Post("refresh")
   @HttpCode(200)
+  @UseGuards(AuthRateLimitGuard)
   async refresh(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
     const token = request.cookies?.[REFRESH_COOKIE];
     if (!token) {
@@ -80,18 +100,26 @@ export class AuthController {
     return { authenticated: true };
   }
 
+  @RateLimit({
+    name: "logout",
+    buckets: [{ name: "ip", identity: "ip", limit: 20, windowSeconds: 60 }],
+  })
   @Post("logout")
   @HttpCode(200)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AuthRateLimitGuard, JwtAuthGuard)
   async logout(@Req() request: AuthedRequest, @Res({ passthrough: true }) response: Response) {
     await this.auth.revokeSession(request.user.id, request.user.sessionId);
     this.clearTokenCookies(response);
     return { success: true };
   }
 
+  @RateLimit({
+    name: "logout-all",
+    buckets: [{ name: "ip", identity: "ip", limit: 20, windowSeconds: 60 }],
+  })
   @Post("logout-all")
   @HttpCode(200)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AuthRateLimitGuard, JwtAuthGuard)
   async logoutAll(@Req() request: AuthedRequest, @Res({ passthrough: true }) response: Response) {
     const result = await this.auth.revokeAllSessions(request.user.id);
     this.clearTokenCookies(response);

@@ -1,4 +1,16 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 import { Request, Response } from "express";
 import { AuthService } from "./auth.service";
 import { ACCESS_COOKIE, ACCESS_TTL_SECONDS, REFRESH_COOKIE, REFRESH_TTL_SECONDS } from "./auth.constants";
@@ -6,7 +18,7 @@ import { RegisterDto } from "./dto/register.dto";
 import { LoginDto } from "./dto/login.dto";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 
-type AuthedRequest = Request & { user: { id: string } };
+type AuthedRequest = Request & { user: { id: string; sessionId: string } };
 
 @Controller("auth")
 export class AuthController {
@@ -39,9 +51,16 @@ export class AuthController {
 
   @Post("login")
   @HttpCode(200)
-  async login(@Body() body: LoginDto, @Res({ passthrough: true }) response: Response) {
+  async login(
+    @Body() body: LoginDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
     const user = await this.auth.validateCredentials(body.email, body.password);
-    const tokens = await this.auth.issueTokens(user.id);
+    const tokens = await this.auth.issueTokens(user.id, {
+      userAgent: request.get("user-agent"),
+      ipAddress: request.ip,
+    });
     this.setTokenCookies(response, tokens);
     return { user: { id: user.id, email: user.email, profile: user.profile } };
   }
@@ -63,9 +82,41 @@ export class AuthController {
 
   @Post("logout")
   @HttpCode(200)
-  async logout(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
-    await this.auth.revokeRefreshToken(request.cookies?.[REFRESH_COOKIE]);
+  @UseGuards(JwtAuthGuard)
+  async logout(@Req() request: AuthedRequest, @Res({ passthrough: true }) response: Response) {
+    await this.auth.revokeSession(request.user.id, request.user.sessionId);
     this.clearTokenCookies(response);
+    return { success: true };
+  }
+
+  @Post("logout-all")
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  async logoutAll(@Req() request: AuthedRequest, @Res({ passthrough: true }) response: Response) {
+    const result = await this.auth.revokeAllSessions(request.user.id);
+    this.clearTokenCookies(response);
+    return { success: true, revokedSessions: result.revokedSessions };
+  }
+
+  @Get("sessions")
+  @UseGuards(JwtAuthGuard)
+  async sessions(@Req() request: AuthedRequest) {
+    return {
+      sessions: await this.auth.listActiveSessions(request.user.id, request.user.sessionId),
+    };
+  }
+
+  @Delete("sessions/:sessionId")
+  @UseGuards(JwtAuthGuard)
+  async revokeSession(
+    @Param("sessionId") sessionId: string,
+    @Req() request: AuthedRequest,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    if (!sessionId || sessionId.length > 128) throw new BadRequestException("Invalid session ID");
+    const revoked = await this.auth.revokeSession(request.user.id, sessionId);
+    if (!revoked) throw new BadRequestException("Session not found or already revoked");
+    if (sessionId === request.user.sessionId) this.clearTokenCookies(response);
     return { success: true };
   }
 

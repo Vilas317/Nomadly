@@ -16,7 +16,10 @@ type RefreshOutcome =
   | { kind: "expired" }
   | { kind: "unavailable" };
 
+type SessionMetadata = { userAgent?: string | null; ipAddress?: string | null };
+
 const RETRY_WINDOW_MS = 30_000;
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
@@ -121,19 +124,39 @@ export class AuthService {
     return safeUser;
   }
 
-  async issueTokens(userId: string, familyId = randomUUID()): Promise<TokenBundle> {
+  async issueTokens(userId: string, metadata: SessionMetadata = {}): Promise<TokenBundle> {
+    const familyId = randomUUID();
     const tokenId = randomUUID();
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + SESSION_TTL_MS);
     const payload = { sub: userId, sid: familyId };
     const [accessToken, refreshToken] = await Promise.all([
       this.jwt.signAsync(payload, { secret: this.accessSecret(), expiresIn: "15m" }),
       this.jwt.signAsync({ ...payload, jti: tokenId }, { secret: this.refreshSecret(), expiresIn: "30d" }),
     ]);
-    await this.prisma.refreshToken.create({
-      data: {
-        userId, familyId, tokenHash: this.tokenHash(refreshToken),
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      },
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.authSession.create({
+        data: {
+          id: familyId,
+          userId,
+          createdAt: now,
+          lastUsedAt: now,
+          expiresAt,
+          userAgent: metadata.userAgent?.slice(0, 512) ?? null,
+          ipAddress: metadata.ipAddress?.slice(0, 64) ?? null,
+        },
+      });
+      await tx.refreshToken.create({
+        data: {
+          userId,
+          familyId,
+          tokenHash: this.tokenHash(refreshToken),
+          expiresAt,
+        },
+      });
     });
+
     return { accessToken, refreshToken };
   }
 
@@ -161,12 +184,28 @@ export class AuthService {
     const newHash = this.tokenHash(refreshToken);
     const now = new Date();
     const retryUntil = new Date(now.getTime() + RETRY_WINDOW_MS);
+    const sessionExpiresAt = new Date(now.getTime() + SESSION_TTL_MS);
 
     const outcome: RefreshOutcome = await this.prisma.$transaction(async (tx) => {
       const current = await tx.refreshToken.findUnique({ where: { tokenHash: oldHash } });
       if (!current || current.userId !== payload.sub || current.familyId !== payload.sid) return { kind: "invalid" };
 
-      const duplicateOutcome = (row: typeof current): RefreshOutcome => {
+      const duplicateOutcome = async (row: typeof current): Promise<RefreshOutcome> => {
+        // A consumed token may be retried idempotently only while its session
+        // and account are still active. Never return a successor bundle after
+        // logout, logout-all, individual session revocation, or suspension.
+        const activeSession = await tx.authSession.findFirst({
+          where: {
+            id: payload.sid,
+            userId: payload.sub,
+            revokedAt: null,
+            expiresAt: { gt: new Date() },
+            user: { is: { status: AccountStatus.ACTIVE } },
+          },
+          select: { id: true },
+        });
+        if (!activeSession) return { kind: "unavailable" };
+
         if (
           row.refreshRequestKeyHash === requestIdHash &&
           row.retryUntil && row.retryUntil > new Date() &&
@@ -198,13 +237,23 @@ export class AuthService {
       }
 
       const user = await tx.user.findUnique({ where: { id: payload.sub }, select: { id: true, status: true } });
-      if (!user || user.status !== AccountStatus.ACTIVE) return { kind: "unavailable" };
+      const session = await tx.authSession.findFirst({
+        where: { id: payload.sid, userId: payload.sub, revokedAt: null, expiresAt: { gt: now } },
+        select: { id: true },
+      });
+      if (!user || user.status !== AccountStatus.ACTIVE || !session) return { kind: "unavailable" };
 
       await tx.refreshToken.create({
         data: {
-          userId: user.id, familyId: current.familyId, tokenHash: newHash,
-          expiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+          userId: user.id,
+          familyId: current.familyId,
+          tokenHash: newHash,
+          expiresAt: sessionExpiresAt,
         },
+      });
+      await tx.authSession.update({
+        where: { id: current.familyId },
+        data: { lastUsedAt: now, expiresAt: sessionExpiresAt },
       });
       return { kind: "rotated", tokens };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
@@ -214,24 +263,88 @@ export class AuthService {
       throw new UnauthorizedException("Refresh token reuse detected; this session has been revoked");
     }
     if (outcome.kind === "expired") throw new UnauthorizedException("Refresh token has expired");
-    if (outcome.kind === "unavailable") throw new UnauthorizedException("Account is unavailable");
+    if (outcome.kind === "unavailable") throw new UnauthorizedException("Account or session is unavailable");
     if (outcome.kind !== "rotated") throw new UnauthorizedException("Refresh token is invalid");
+
+    // A duplicate retry returns the same token bundle; this update never clears a revocation.
+    await this.prisma.authSession.updateMany({
+      where: { id: payload.sid, userId: payload.sub, revokedAt: null },
+      data: { lastUsedAt: new Date(), expiresAt: sessionExpiresAt },
+    });
     return outcome.tokens;
   }
 
   private async revokeTokenFamily(familyId: string) {
-    await this.prisma.refreshToken.updateMany({
-      where: { familyId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.authSession.updateMany({
+        where: { id: familyId, revokedAt: null },
+        data: { revokedAt: now },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { familyId, revokedAt: null },
+        data: { revokedAt: now },
+      }),
+    ]);
   }
 
   async revokeRefreshToken(token: string | undefined) {
     if (!token) return;
     const stored = await this.prisma.refreshToken.findUnique({
-      where: { tokenHash: this.tokenHash(token) }, select: { familyId: true },
+      where: { tokenHash: this.tokenHash(token) },
+      select: { familyId: true },
     });
     if (stored) await this.revokeTokenFamily(stored.familyId);
+  }
+
+  async revokeSession(userId: string, sessionId: string) {
+    const now = new Date();
+    return this.prisma.$transaction(async (tx) => {
+      const session = await tx.authSession.findFirst({
+        where: { id: sessionId, userId, revokedAt: null },
+        select: { id: true },
+      });
+      if (!session) return false;
+      await tx.authSession.update({ where: { id: sessionId }, data: { revokedAt: now } });
+      await tx.refreshToken.updateMany({
+        where: { familyId: sessionId, userId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      return true;
+    });
+  }
+
+  async revokeAllSessions(userId: string) {
+    const now = new Date();
+    return this.prisma.$transaction(async (tx) => {
+      const sessions = await tx.authSession.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      await tx.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      return { revokedSessions: sessions.count };
+    });
+  }
+
+  async listActiveSessions(userId: string, currentSessionId: string) {
+    return this.prisma.authSession.findMany({
+      where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
+      orderBy: { lastUsedAt: "desc" },
+      select: {
+        id: true,
+        createdAt: true,
+        lastUsedAt: true,
+        expiresAt: true,
+        userAgent: true,
+        ipAddress: true,
+      },
+    }).then((sessions) => sessions.map((session) => ({
+      ...session,
+      isCurrent: session.id === currentSessionId,
+    })));
   }
 
   async getCurrentUser(userId: string) {

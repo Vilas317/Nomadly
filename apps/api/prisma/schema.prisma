@@ -97,6 +97,7 @@ model User {
   blocksReceived      Block[]            @relation("Blocked")
   savedDestinations   SavedDestination[]
   refreshTokens       RefreshToken[]
+  authSessions        AuthSession[]
 }
 
 model Profile {
@@ -387,14 +388,31 @@ model Block {
   @@unique([blockerId, blockedId])
 }
 
+model AuthSession {
+  id            String         @id
+  userId        String
+  createdAt     DateTime       @default(now())
+  lastUsedAt    DateTime       @default(now())
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  userAgent     String?
+  ipAddress     String?
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
 model RefreshToken {
-  id                    String    @id @default(uuid())
+  id                    String      @id @default(uuid())
   userId                String
-  tokenHash             String    @unique
+  tokenHash             String      @unique
   expiresAt             DateTime
-  createdAt             DateTime  @default(now())
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt             DateTime    @default(now())
+  user                  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   familyId              String
+  session               AuthSession @relation(fields: [familyId], references: [id], onDelete: Cascade)
   revokedAt             DateTime?
   replacedByTokenHash   String?
   refreshRequestKeyHash String?

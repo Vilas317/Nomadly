@@ -1,0 +1,21 @@
+{
+  "name": "nomadly",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "concurrently -k \"pnpm dev:web\" \"pnpm dev:api\"",
+    "dev:web": "pnpm --filter @nomadly/web dev",
+    "dev:api": "pnpm --filter @nomadly/api start:dev",
+    "build": "pnpm --filter @nomadly/shared build && pnpm --filter @nomadly/api build && pnpm --filter @nomadly/web build",
+    "lint": "pnpm --filter @nomadly/web lint",
+    "db:generate": "pnpm --filter @nomadly/api prisma:generate",
+    "db:migrate": "pnpm --filter @nomadly/api prisma:migrate",
+    "db:seed": "pnpm --filter @nomadly/api prisma:seed",
+    "db:studio": "pnpm --filter @nomadly/api prisma:studio"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  }
+}

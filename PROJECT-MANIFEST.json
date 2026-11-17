@@ -1,0 +1,25 @@
+{
+  "project": "Nomadly",
+  "version": "0.1.0",
+  "generated_artifact": "starter foundation",
+  "file_count": 44,
+  "included": [
+    "Next.js responsive web starter",
+    "NestJS API foundation",
+    "PostgreSQL/PostGIS Docker setup",
+    "Initial Prisma schema",
+    "Destination API and seed data",
+    "Product and architecture documentation"
+  ],
+  "not_yet_implemented": [
+    "Production authentication and onboarding",
+    "Social posting and media upload workflows",
+    "Traveller matching and connections",
+    "Real-time messaging",
+    "Trip collaboration",
+    "Festival data ingestion and verification",
+    "AI assistant integrations",
+    "Bookings and payments",
+    "Production moderation workflows"
+  ]
+}

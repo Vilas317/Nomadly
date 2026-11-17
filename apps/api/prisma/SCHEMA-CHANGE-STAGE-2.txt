@@ -1,0 +1,14 @@
+Add these nullable fields to the existing RefreshToken model; preserve every existing field and index:
+
+  refreshRequestKeyHash String?
+  retryUntil             DateTime?
+  successorCiphertext   String?
+  successorIv           String?
+  successorAuthTag      String?
+
+Then run:
+  pnpm --filter @nomadly/api exec prisma format
+  pnpm --filter @nomadly/api prisma:generate
+  pnpm db:migrate
+
+The SQL migration is included. Add the schema fields before running the migration.

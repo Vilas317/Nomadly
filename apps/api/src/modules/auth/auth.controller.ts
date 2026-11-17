@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from "@nestjs/common";
 import { Request, Response } from "express";
 import { AuthService } from "./auth.service";
 import { ACCESS_COOKIE, ACCESS_TTL_SECONDS, REFRESH_COOKIE, REFRESH_TTL_SECONDS } from "./auth.constants";
@@ -54,7 +54,9 @@ export class AuthController {
       this.clearTokenCookies(response);
       return { authenticated: false };
     }
-    const tokens = await this.auth.rotateRefreshToken(token);
+    const requestId = request.header("x-refresh-request-id");
+    if (!requestId) throw new BadRequestException("X-Refresh-Request-Id header is required");
+    const tokens = await this.auth.rotateRefreshToken(token, requestId);
     this.setTokenCookies(response, tokens);
     return { authenticated: true };
   }

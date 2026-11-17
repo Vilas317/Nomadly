@@ -73,58 +73,58 @@ enum ReportStatus {
 }
 
 model User {
-  id             String          @id @default(uuid())
-  email          String          @unique
-  passwordHash   String
-  emailVerifiedAt DateTime?
-  status         AccountStatus   @default(ACTIVE)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  profile        Profile?
-  posts          Post[]
-  comments       Comment[]
-  likes          Like[]
-  following      Follow[]        @relation("Following")
-  followers      Follow[]        @relation("Followers")
-  sentConnections Connection[]   @relation("ConnectionSender")
-  receivedConnections Connection[] @relation("ConnectionReceiver")
-  ownedTrips     Trip[]          @relation("TripOwner")
-  tripMemberships TripMember[]
-  sentMessages   Message[]
-  notifications  Notification[]
-  reports        Report[]        @relation("ReportAuthor")
-  blocksMade     Block[]         @relation("Blocker")
-  blocksReceived Block[]         @relation("Blocked")
-  savedDestinations SavedDestination[]
-  refreshTokens RefreshToken[]
+  id                  String             @id @default(uuid())
+  email               String             @unique
+  passwordHash        String
+  emailVerifiedAt     DateTime?
+  status              AccountStatus      @default(ACTIVE)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  profile             Profile?
+  posts               Post[]
+  comments            Comment[]
+  likes               Like[]
+  following           Follow[]           @relation("Following")
+  followers           Follow[]           @relation("Followers")
+  sentConnections     Connection[]       @relation("ConnectionSender")
+  receivedConnections Connection[]       @relation("ConnectionReceiver")
+  ownedTrips          Trip[]             @relation("TripOwner")
+  tripMemberships     TripMember[]
+  sentMessages        Message[]
+  notifications       Notification[]
+  reports             Report[]           @relation("ReportAuthor")
+  blocksMade          Block[]            @relation("Blocker")
+  blocksReceived      Block[]            @relation("Blocked")
+  savedDestinations   SavedDestination[]
+  refreshTokens       RefreshToken[]
 }
 
 model Profile {
-  id             String            @id @default(uuid())
-  userId         String            @unique
-  username       String            @unique
-  displayName    String
-  bio            String?           @db.VarChar(500)
-  avatarUrl      String?
-  homeCity       String?
-  homeState      String?
-  homeCountry    String?
-  visibility     ProfileVisibility @default(PUBLIC)
-  travelStyle    String?
-  budgetMin      Int?
-  budgetMax      Int?
-  languages      String[]          @default([])
-  interests      String[]          @default([])
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String            @id @default(uuid())
+  userId      String            @unique
+  username    String            @unique
+  displayName String
+  bio         String?           @db.VarChar(500)
+  avatarUrl   String?
+  homeCity    String?
+  homeState   String?
+  homeCountry String?
+  visibility  ProfileVisibility @default(PUBLIC)
+  travelStyle String?
+  budgetMin   Int?
+  budgetMax   Int?
+  languages   String[]          @default([])
+  interests   String[]          @default([])
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Destination {
-  id          String        @id @default(uuid())
+  id          String             @id @default(uuid())
   name        String
-  slug        String        @unique
-  description String        @db.Text
+  slug        String             @unique
+  description String             @db.Text
   city        String?
   state       String?
   country     String
@@ -133,10 +133,10 @@ model Destination {
   coverImage  String?
   category    String
   bestSeason  String?
-  featured    Boolean       @default(false)
-  status      ContentStatus @default(DRAFT)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  featured    Boolean            @default(false)
+  status      ContentStatus      @default(DRAFT)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
   posts       Post[]
   trips       Trip[]
   bookmarks   SavedDestination[]
@@ -175,12 +175,12 @@ model Post {
 }
 
 model PostMedia {
-  id        String   @id @default(uuid())
+  id        String  @id @default(uuid())
   postId    String
   url       String
   altText   String?
-  sortOrder Int      @default(0)
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  sortOrder Int     @default(0)
+  post      Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
 }
 
 model Comment {
@@ -219,36 +219,36 @@ model Follow {
 }
 
 model Connection {
-  id          String           @id @default(uuid())
-  senderId    String
-  receiverId  String
-  status      ConnectionStatus @default(PENDING)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  sender      User             @relation("ConnectionSender", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver    User             @relation("ConnectionReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  id         String           @id @default(uuid())
+  senderId   String
+  receiverId String
+  status     ConnectionStatus @default(PENDING)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  sender     User             @relation("ConnectionSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User             @relation("ConnectionReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
 
   @@unique([senderId, receiverId])
   @@index([receiverId, status])
 }
 
 model Trip {
-  id            String         @id @default(uuid())
+  id            String          @id @default(uuid())
   ownerId       String
   destinationId String?
   title         String
-  description   String?        @db.VarChar(2000)
+  description   String?         @db.VarChar(2000)
   startDate     DateTime
   endDate       DateTime
   budgetMin     Int?
   budgetMax     Int?
-  currency      String         @default("INR")
-  visibility    TripVisibility @default(PUBLIC)
-  status        TripStatus     @default(PLANNING)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  owner         User           @relation("TripOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  destination   Destination?   @relation(fields: [destinationId], references: [id], onDelete: SetNull)
+  currency      String          @default("INR")
+  visibility    TripVisibility  @default(PUBLIC)
+  status        TripStatus      @default(PLANNING)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  owner         User            @relation("TripOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  destination   Destination?    @relation(fields: [destinationId], references: [id], onDelete: SetNull)
   members       TripMember[]
   itinerary     ItineraryItem[]
 
@@ -271,28 +271,28 @@ model TripMember {
 }
 
 model ItineraryItem {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   tripId      String
   title       String
-  description String?  @db.VarChar(1000)
+  description String?   @db.VarChar(1000)
   location    String?
   latitude    Float?
   longitude   Float?
   startsAt    DateTime
   endsAt      DateTime?
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  trip        Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  trip        Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
 
   @@index([tripId, startsAt])
 }
 
 model Conversation {
-  id        String                  @id @default(uuid())
+  id        String               @id @default(uuid())
   title     String?
-  isGroup   Boolean                 @default(false)
-  createdAt DateTime                @default(now())
+  isGroup   Boolean              @default(false)
+  createdAt DateTime             @default(now())
   members   ConversationMember[]
   messages  Message[]
 }
@@ -320,41 +320,41 @@ model Message {
 }
 
 model Notification {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
   type      String
   title     String
   body      String?
   readAt    DateTime?
   data      Json?
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt, createdAt])
 }
 
 model Festival {
-  id                 String           @id @default(uuid())
-  name               String
-  slug               String           @unique
-  description        String           @db.Text
-  country            String
-  city               String?
-  venue              String?
-  dateType           FestivalDateType @default(VARIABLE)
-  startDate          DateTime?
-  endDate            DateTime?
-  localTimeZone      String?
-  scheduleNotes      String?
-  dressGuidance      String?          @db.Text
-  culturalEtiquette  String?          @db.Text
-  officialUrl         String?
-  sourceName          String?
-  sourceUrl           String?
-  lastVerifiedAt      DateTime?
-  status              ContentStatus   @default(DRAFT)
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
+  id                String           @id @default(uuid())
+  name              String
+  slug              String           @unique
+  description       String           @db.Text
+  country           String
+  city              String?
+  venue             String?
+  dateType          FestivalDateType @default(VARIABLE)
+  startDate         DateTime?
+  endDate           DateTime?
+  localTimeZone     String?
+  scheduleNotes     String?
+  dressGuidance     String?          @db.Text
+  culturalEtiquette String?          @db.Text
+  officialUrl       String?
+  sourceName        String?
+  sourceUrl         String?
+  lastVerifiedAt    DateTime?
+  status            ContentStatus    @default(DRAFT)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   @@index([country, city])
   @@index([startDate, endDate])
@@ -362,16 +362,16 @@ model Festival {
 }
 
 model Report {
-  id          String       @id @default(uuid())
-  authorId    String
-  targetType  String
-  targetId    String
-  reason      String
-  details     String?      @db.VarChar(2000)
-  status      ReportStatus @default(OPEN)
-  createdAt   DateTime     @default(now())
-  reviewedAt  DateTime?
-  author      User         @relation("ReportAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  id         String       @id @default(uuid())
+  authorId   String
+  targetType String
+  targetId   String
+  reason     String
+  details    String?      @db.VarChar(2000)
+  status     ReportStatus @default(OPEN)
+  createdAt  DateTime     @default(now())
+  reviewedAt DateTime?
+  author     User         @relation("ReportAuthor", fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
 }
@@ -388,12 +388,22 @@ model Block {
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid())
-  userId    String
-  tokenHash String   @unique
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    String    @id @default(uuid())
+  userId                String
+  tokenHash             String    @unique
+  expiresAt             DateTime
+  createdAt             DateTime  @default(now())
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyId              String
+  revokedAt             DateTime?
+  replacedByTokenHash   String?
+  refreshRequestKeyHash String?
+  retryUntil            DateTime?
+  successorCiphertext   String?
+  successorIv           String?
+  successorAuthTag      String?
 
   @@index([userId, expiresAt])
+  @@index([familyId, revokedAt])
+  @@index([retryUntil])
 }

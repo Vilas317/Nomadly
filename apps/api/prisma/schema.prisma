@@ -96,6 +96,7 @@ model User {
   blocksMade     Block[]         @relation("Blocker")
   blocksReceived Block[]         @relation("Blocked")
   savedDestinations SavedDestination[]
+  refreshTokens RefreshToken[]
 }
 
 model Profile {
@@ -384,4 +385,15 @@ model Block {
   blocked   User     @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
 
   @@unique([blockerId, blockedId])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
 }

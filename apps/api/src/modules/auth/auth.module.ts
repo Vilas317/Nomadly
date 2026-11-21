@@ -10,7 +10,13 @@ import { AuthEmailService } from "./services/email.service";
 @Module({
   imports: [JwtModule.register({})],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard, AuthRateLimitGuard, RedisRateLimitService, AuthEmailService],
+  providers: [
+    AuthService,
+    JwtAuthGuard,
+    AuthRateLimitGuard,
+    RedisRateLimitService,
+    AuthEmailService,
+  ],
   exports: [JwtAuthGuard],
 })
 export class AuthModule {}

@@ -56,6 +56,34 @@ export class AuthController {
     return { user: await this.auth.register(body) };
   }
 
+  @RateLimit({ name: "verify-email", buckets: [{ name: "ip", identity: "ip", limit: 20, windowSeconds: 15 * 60 }] })
+  @Post("verify-email")
+  @HttpCode(200)
+  @UseGuards(AuthRateLimitGuard)
+  async verifyEmail(@Body() body: { token?: string }) {
+    return this.auth.verifyEmail(body.token || "");
+  }
+
+  @RateLimit({ name: "resend-verification", buckets: [{ name: "ip", identity: "ip", limit: 5, windowSeconds: 15 * 60 }] })
+  @Post("resend-verification")
+  @HttpCode(200)
+  @UseGuards(AuthRateLimitGuard)
+  async resendVerification(@Body() body: { email?: string }) {
+    if (!body.email || body.email.length > 254) throw new BadRequestException("A valid email is required");
+    return this.auth.resendVerification(body.email);
+  }
+
+  @RateLimit({ name: "google-login", buckets: [{ name: "ip", identity: "ip", limit: 20, windowSeconds: 15 * 60 }] })
+  @Post("google")
+  @HttpCode(200)
+  @UseGuards(AuthRateLimitGuard)
+  async google(@Body() body: { credential?: string }, @Req() request: Request, @Res({ passthrough: true }) response: Response) {
+    const user = await this.auth.authenticateGoogleCredential(body.credential || "");
+    const tokens = await this.auth.issueTokens(user.id, { userAgent: request.get("user-agent"), ipAddress: request.ip });
+    this.setTokenCookies(response, tokens);
+    return { user };
+  }
+
   @RateLimit({
     name: "login",
     buckets: [
@@ -77,7 +105,7 @@ export class AuthController {
       ipAddress: request.ip,
     });
     this.setTokenCookies(response, tokens);
-    return { user: { id: user.id, email: user.email, profile: user.profile } };
+    return { user: { id: user.id, email: user.email, emailVerified: Boolean(user.emailVerifiedAt), profile: user.profile } };
   }
 
   @RateLimit({

@@ -7,6 +7,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum OAuthProvider {
+  GOOGLE
+}
+
 enum AccountStatus {
   ACTIVE
   SUSPENDED
@@ -98,6 +102,8 @@ model User {
   savedDestinations   SavedDestination[]
   refreshTokens       RefreshToken[]
   authSessions        AuthSession[]
+  emailVerificationTokens EmailVerificationToken[]
+  oauthAccounts        OAuthAccount[]
 }
 
 model Profile {
@@ -424,4 +430,34 @@ model RefreshToken {
   @@index([userId, expiresAt])
   @@index([familyId, revokedAt])
   @@index([retryUntil])
+}
+
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+
+model OAuthAccount {
+  id                 String        @id @default(uuid())
+  userId             String
+  provider           OAuthProvider
+  providerAccountId  String
+  providerEmail      String
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@unique([userId, provider])
+  @@index([userId])
 }

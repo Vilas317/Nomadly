@@ -229,3 +229,71 @@ body{background:var(--paper);color:var(--ink);font-size:14px;letter-spacing:-.01
  .booking-option-list>div{padding:13px}
  .coming-soon{font-size:8px}
 }
+
+/* Authentication */
+.auth-page{min-height:70vh;display:grid;place-items:center;padding:54px 20px}.auth-card{width:min(100%,470px);padding:42px;background:#fff;border:1px solid #e8ece6;border-radius:24px;box-shadow:0 20px 70px rgba(32,63,50,.07)}.auth-card h1{font-size:clamp(38px,6vw,54px);line-height:1.02;letter-spacing:-2px;margin:14px 0}.auth-card h1 em{font-style:normal;color:#66836d}.auth-card>p{font-size:13px;line-height:1.7;color:#77837a}.auth-form{display:grid;gap:15px;margin-top:25px}.auth-form label{display:grid;gap:7px;color:#53665a;font-size:11px;font-weight:700}.auth-form input{width:100%;padding:14px;border:1px solid #e3e9e1;border-radius:11px;outline:none;font:inherit;color:#203f32}.auth-form input:focus{border-color:#66836d;box-shadow:0 0 0 3px rgba(102,131,109,.12)}.auth-submit{width:100%;justify-content:center;margin-top:5px;min-height:47px}.auth-divider{display:flex;align-items:center;gap:14px;margin:25px 0 18px;color:#98a198;font-size:9px;font-weight:700;letter-spacing:1.4px}.auth-divider:before,.auth-divider:after{content:"";height:1px;background:#e8ece6;flex:1}.google-auth-wrap{display:grid;justify-items:center;min-height:42px}.auth-switch{text-align:center;margin:23px 0 0!important;font-size:12px!important}.auth-switch a{color:#315a40;font-weight:700}.auth-error{color:#b33b35!important;font-size:12px!important}.auth-muted{color:#879188;font-size:11px}@media(max-width:520px){.auth-card{padding:28px 22px}.auth-page{padding:30px 14px}}
+
+/* ── Authentication input visibility + polish ── */
+.auth-form input {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 13px 15px;
+  color: #203f32;
+  -webkit-text-fill-color: #203f32;
+  background-color: #fff;
+  border: 1px solid #dfe6de;
+  border-radius: 12px;
+  outline: none;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  caret-color: #315a40;
+  color-scheme: light;
+  transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+}
+
+.auth-form input::placeholder {
+  color: #9aa49c;
+  opacity: 1;
+}
+
+.auth-form input:hover {
+  border-color: #cbd7cc;
+}
+
+.auth-form input:focus {
+  color: #203f32;
+  background-color: #fff;
+  border-color: #66836d;
+  box-shadow: 0 0 0 4px rgba(102, 131, 109, .13);
+}
+
+.auth-form input:focus-visible {
+  outline: 2px solid transparent;
+}
+
+.auth-form input:disabled {
+  color: #7b887f;
+  background-color: #f4f6f2;
+  cursor: not-allowed;
+}
+
+/* Keep Chrome/Edge autofill readable instead of allowing its theme to
+   replace the input text and background colors. */
+.auth-form input:-webkit-autofill,
+.auth-form input:-webkit-autofill:hover,
+.auth-form input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #203f32;
+  caret-color: #315a40;
+  box-shadow: 0 0 0 1000px #fff inset;
+  transition: background-color 9999s ease-out 0s;
+}
+
+/* Slightly clearer field labels and consistent vertical rhythm. */
+.auth-form label {
+  gap: 8px;
+  color: #40584a;
+  font-size: 12px;
+  font-weight: 600;
+}

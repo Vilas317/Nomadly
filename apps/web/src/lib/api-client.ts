@@ -20,14 +20,11 @@ function getRequestId(): string {
 export async function refreshSession(): Promise<boolean> {
   if (typeof window === "undefined") return false;
   if (refreshInFlight) return refreshInFlight;
-
   refreshInFlight = (async () => {
     const requestId = getRequestId();
     try {
       const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "X-Refresh-Request-Id": requestId },
+        method: "POST", credentials: "include", headers: { "X-Refresh-Request-Id": requestId },
       });
       if (!response.ok) {
         window.localStorage.removeItem(REFRESH_ID_KEY);
@@ -37,12 +34,10 @@ export async function refreshSession(): Promise<boolean> {
       if (!result.authenticated) window.localStorage.removeItem(REFRESH_ID_KEY);
       return Boolean(result.authenticated);
     } catch (error) {
-      // Retain the same request ID: the server may have committed rotation before
-      // the response was lost. A retry within the server's window gets the same tokens.
+      // Keep the request ID: the server may have committed rotation before the response was lost.
       throw error;
     }
   })();
-
   try { return await refreshInFlight; }
   finally { refreshInFlight = null; }
 }
@@ -59,21 +54,23 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 }
 
 export function login(email: string, password: string) {
-  return apiFetch("/auth/login", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
+  return apiFetch("/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
 }
-
 export function register(input: { email: string; username: string; displayName: string; password: string }) {
-  return apiFetch("/auth/register", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
+  return apiFetch("/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
 }
-
 export async function logout() {
   const response = await apiFetch("/auth/logout", { method: "POST" });
   if (typeof window !== "undefined") window.localStorage.removeItem(REFRESH_ID_KEY);
   return response;
+}
+export function getCurrentUser() { return apiFetch("/auth/me", { method: "GET" }); }
+export function verifyEmail(token: string) {
+  return apiFetch("/auth/verify-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+}
+export function resendVerification(email: string) {
+  return apiFetch("/auth/resend-verification", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+}
+export function googleLogin(credential: string) {
+  return apiFetch("/auth/google", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ credential }) });
 }

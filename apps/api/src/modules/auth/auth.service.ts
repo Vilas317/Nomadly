@@ -5,6 +5,7 @@ import * as argon2 from "argon2";
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RegisterDto } from "./dto/register.dto";
+import { AuthEmailService } from "./services/email.service";
 
 type AuthUser = { id: string; email: string; profile: { username: string; displayName: string; avatarUrl: string | null } | null };
 type TokenBundle = { accessToken: string; refreshToken: string };
@@ -23,7 +24,7 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly prisma: PrismaService, private readonly jwt: JwtService) {}
+  constructor(private readonly prisma: PrismaService, private readonly jwt: JwtService, private readonly emailService: AuthEmailService) {}
 
   private accessSecret() {
     const secret = process.env.JWT_ACCESS_SECRET;
@@ -100,9 +101,17 @@ export class AuthService {
     try {
       const user = await this.prisma.user.create({
         data: { email, passwordHash, profile: { create: { username, displayName: input.displayName.trim() } } },
-        select: { id: true, email: true, profile: { select: { username: true, displayName: true, avatarUrl: true } } },
+        select: { id: true, email: true, emailVerifiedAt: true, profile: { select: { username: true, displayName: true, avatarUrl: true } } },
       });
-      return this.publicUser(user);
+      let verificationEmailSent = true;
+      try {
+        await this.createAndSendVerification(user.id, user.email);
+      } catch {
+        // Account creation succeeded; do not report registration failure merely
+        // because the email provider is temporarily unavailable. The user can resend.
+        verificationEmailSent = false;
+      }
+      return { ...this.publicUser(user), emailVerified: false, verificationEmailSent };
     } catch (error: any) {
       if (error?.code === "P2002") throw new ConflictException("Email or username is already in use");
       throw error;
@@ -113,7 +122,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: emailInput.trim().toLowerCase() },
       select: {
-        id: true, email: true, passwordHash: true, status: true,
+        id: true, email: true, passwordHash: true, status: true, emailVerifiedAt: true,
         profile: { select: { username: true, displayName: true, avatarUrl: true } },
       },
     });
@@ -347,10 +356,240 @@ export class AuthService {
     })));
   }
 
+private async createAndSendVerification(userId: string, email: string) {
+  const token = randomBytes(32).toString("base64url");
+  const tokenHash = this.tokenHash(token);
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+  await this.prisma.$transaction(async (tx) => {
+    await tx.emailVerificationToken.updateMany({
+      where: { userId, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+
+    await tx.emailVerificationToken.create({
+      data: { userId, tokenHash, expiresAt },
+    });
+  });
+
+  try {
+    await this.emailService.sendVerificationEmail(email, token);
+  } catch (error) {
+    await this.prisma.emailVerificationToken.deleteMany({
+      where: { tokenHash, usedAt: null },
+    });
+
+    throw error;
+  }
+}
+
+  async resendVerification(emailInput: string) {
+    const email = emailInput.trim().toLowerCase();
+    const user = await this.prisma.user.findUnique({ where: { email }, select: { id: true, email: true, emailVerifiedAt: true } });
+    // Do not reveal whether an account exists or is already verified.
+    if (user && !user.emailVerifiedAt) await this.createAndSendVerification(user.id, user.email);
+    return { success: true, message: "If an unverified account exists for that address, a verification email has been sent." };
+  }
+
+  async verifyEmail(rawToken: string) {
+    if (!rawToken || rawToken.length > 256) throw new UnauthorizedException("Verification link is invalid or expired");
+    const tokenHash = this.tokenHash(rawToken);
+    const now = new Date();
+    const result = await this.prisma.$transaction(async (tx) => {
+      const token = await tx.emailVerificationToken.findUnique({ where: { tokenHash } });
+      if (!token || token.usedAt || token.expiresAt <= now) return false;
+      const consumed = await tx.emailVerificationToken.updateMany({ where: { id: token.id, usedAt: null, expiresAt: { gt: now } }, data: { usedAt: now } });
+      if (consumed.count !== 1) return false;
+      await tx.user.update({ where: { id: token.userId }, data: { emailVerifiedAt: now } });
+      await tx.emailVerificationToken.updateMany({ where: { userId: token.userId, usedAt: null }, data: { usedAt: now } });
+      return true;
+    });
+    if (!result) throw new UnauthorizedException("Verification link is invalid, expired, or already used");
+    return { success: true, emailVerified: true };
+  }
+
+  async authenticateGoogleCredential(credential: string) {
+    if (!credential || credential.length > 10000) {
+      throw new UnauthorizedException("Google credential is invalid");
+    }
+
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) throw new Error("GOOGLE_CLIENT_ID is not configured");
+
+    // Verify the ID token signature, issuer, audience and expiry using Google's
+    // maintained authentication library. Never trust decoded JWT claims alone.
+    const { OAuth2Client } = await import("google-auth-library");
+    const googleClient = new OAuth2Client(clientId);
+    let claims;
+    try {
+      const ticket = await googleClient.verifyIdToken({
+        idToken: credential,
+        audience: clientId,
+      });
+      claims = ticket.getPayload();
+    } catch {
+      throw new UnauthorizedException("Google sign-in could not be verified");
+    }
+
+    if (!claims?.sub || !claims.email || claims.email_verified !== true) {
+      throw new UnauthorizedException("Google account verification failed");
+    }
+
+    const providerAccountId = claims.sub;
+    const email = claims.email.trim().toLowerCase();
+    const now = new Date();
+
+    try {
+      const user = await this.prisma.$transaction(async (tx) => {
+        // The Google subject (sub), not the email address, is the stable identity.
+        const linked = await tx.oAuthAccount.findUnique({
+          where: {
+            provider_providerAccountId: {
+              provider: "GOOGLE",
+              providerAccountId,
+            },
+          },
+          include: { user: { include: { profile: true } } },
+        });
+
+        if (linked) {
+          if (linked.user.status !== AccountStatus.ACTIVE || !linked.user.profile) {
+            throw new UnauthorizedException("Account is unavailable");
+          }
+
+          // Google email addresses can change. Keep the existing Nomadly account
+          // email unchanged and refresh only the provider's current email metadata.
+          if (linked.providerEmail !== email) {
+            await tx.oAuthAccount.update({
+              where: { id: linked.id },
+              data: { providerEmail: email },
+            });
+          }
+          return linked.user;
+        }
+
+        let existing = await tx.user.findUnique({
+          where: { email },
+          include: { profile: true },
+        });
+
+        if (existing && !existing.profile) {
+          throw new UnauthorizedException(
+            "This account needs profile setup before Google sign-in can continue",
+          );
+        }
+        if (existing && existing.status !== AccountStatus.ACTIVE) {
+          throw new UnauthorizedException("Account is unavailable");
+        }
+
+        if (!existing) {
+          const base = (
+            email
+              .split("@")[0]
+              .toLowerCase()
+              .replace(/[^a-z0-9_]/g, "_")
+              .slice(0, 14) || "traveller"
+          ).replace(/^_+|_+$/g, "") || "traveller";
+
+          // Database uniqueness remains the final authority if two first logins
+          // happen concurrently; the P2002 handler below safely resolves a race.
+          const username = `${base}_${randomBytes(5).toString("hex")}`.slice(0, 24);
+          const unusablePasswordHash = await argon2.hash(
+            randomBytes(48).toString("hex"),
+            { type: argon2.argon2id },
+          );
+
+          existing = await tx.user.create({
+            data: {
+              email,
+              passwordHash: unusablePasswordHash,
+              emailVerifiedAt: now,
+              profile: {
+                create: {
+                  username,
+                  displayName: (claims.name || base).slice(0, 80),
+                  avatarUrl: claims.picture || null,
+                },
+              },
+            },
+            include: { profile: true },
+          });
+        } else if (!existing.emailVerifiedAt) {
+          // A verified Google ID token proves control of this exact email address.
+          existing = await tx.user.update({
+            where: { id: existing.id },
+            data: { emailVerifiedAt: now },
+            include: { profile: true },
+          });
+        }
+
+        await tx.oAuthAccount.create({
+          data: {
+            userId: existing.id,
+            provider: "GOOGLE",
+            providerAccountId,
+            providerEmail: email,
+          },
+        });
+
+        return existing;
+      });
+
+      return this.publicUser({
+        id: user.id,
+        email: user.email,
+        profile: user.profile
+          ? {
+              username: user.profile.username,
+              displayName: user.profile.displayName,
+              avatarUrl: user.profile.avatarUrl,
+            }
+          : null,
+      });
+    } catch (error: any) {
+      if (error instanceof UnauthorizedException) throw error;
+
+      if (error?.code === "P2002") {
+        // A concurrent first login may have created this Google identity first.
+        const linked = await this.prisma.oAuthAccount.findUnique({
+          where: {
+            provider_providerAccountId: {
+              provider: "GOOGLE",
+              providerAccountId,
+            },
+          },
+          include: { user: { include: { profile: true } } },
+        });
+
+        if (
+          linked &&
+          linked.user.status === AccountStatus.ACTIVE &&
+          linked.user.profile
+        ) {
+          return this.publicUser({
+            id: linked.user.id,
+            email: linked.user.email,
+            profile: {
+              username: linked.user.profile.username,
+              displayName: linked.user.profile.displayName,
+              avatarUrl: linked.user.profile.avatarUrl,
+            },
+          });
+        }
+
+        throw new UnauthorizedException(
+          "This Google account could not be linked safely",
+        );
+      }
+
+      throw error;
+    }
+  }
+
   async getCurrentUser(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, profile: { select: {
+      select: { id: true, email: true, emailVerifiedAt: true, profile: { select: {
         username: true, displayName: true, bio: true, avatarUrl: true,
         homeCity: true, homeState: true, homeCountry: true, visibility: true,
         travelStyle: true, budgetMin: true, budgetMax: true, languages: true, interests: true,

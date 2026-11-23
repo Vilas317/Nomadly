@@ -22,6 +22,13 @@ enum ProfileVisibility {
   PRIVATE
 }
 
+enum OnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SKIPPED
+  COMPLETED
+}
+
 enum ContentStatus {
   DRAFT
   PUBLISHED
@@ -77,54 +84,57 @@ enum ReportStatus {
 }
 
 model User {
-  id                  String             @id @default(uuid())
-  email               String             @unique
-  passwordHash        String
-  emailVerifiedAt     DateTime?
-  status              AccountStatus      @default(ACTIVE)
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
-  profile             Profile?
-  posts               Post[]
-  comments            Comment[]
-  likes               Like[]
-  following           Follow[]           @relation("Following")
-  followers           Follow[]           @relation("Followers")
-  sentConnections     Connection[]       @relation("ConnectionSender")
-  receivedConnections Connection[]       @relation("ConnectionReceiver")
-  ownedTrips          Trip[]             @relation("TripOwner")
-  tripMemberships     TripMember[]
-  sentMessages        Message[]
-  notifications       Notification[]
-  reports             Report[]           @relation("ReportAuthor")
-  blocksMade          Block[]            @relation("Blocker")
-  blocksReceived      Block[]            @relation("Blocked")
-  savedDestinations   SavedDestination[]
-  refreshTokens       RefreshToken[]
-  authSessions        AuthSession[]
+  id                      String                   @id @default(uuid())
+  email                   String                   @unique
+  passwordHash            String
+  emailVerifiedAt         DateTime?
+  status                  AccountStatus            @default(ACTIVE)
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  profile                 Profile?
+  posts                   Post[]
+  comments                Comment[]
+  likes                   Like[]
+  following               Follow[]                 @relation("Following")
+  followers               Follow[]                 @relation("Followers")
+  sentConnections         Connection[]             @relation("ConnectionSender")
+  receivedConnections     Connection[]             @relation("ConnectionReceiver")
+  ownedTrips              Trip[]                   @relation("TripOwner")
+  tripMemberships         TripMember[]
+  sentMessages            Message[]
+  notifications           Notification[]
+  reports                 Report[]                 @relation("ReportAuthor")
+  blocksMade              Block[]                  @relation("Blocker")
+  blocksReceived          Block[]                  @relation("Blocked")
+  savedDestinations       SavedDestination[]
+  refreshTokens           RefreshToken[]
+  authSessions            AuthSession[]
   emailVerificationTokens EmailVerificationToken[]
-  oauthAccounts        OAuthAccount[]
+  oauthAccounts           OAuthAccount[]
 }
 
 model Profile {
-  id          String            @id @default(uuid())
-  userId      String            @unique
-  username    String            @unique
-  displayName String
-  bio         String?           @db.VarChar(500)
-  avatarUrl   String?
-  homeCity    String?
-  homeState   String?
-  homeCountry String?
-  visibility  ProfileVisibility @default(PUBLIC)
-  travelStyle String?
-  budgetMin   Int?
-  budgetMax   Int?
-  languages   String[]          @default([])
-  interests   String[]          @default([])
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    String            @id @default(uuid())
+  userId                String            @unique
+  username              String            @unique
+  displayName           String
+  bio                   String?           @db.VarChar(500)
+  avatarUrl             String?
+  homeCity              String?
+  homeState             String?
+  homeCountry           String?
+  visibility            ProfileVisibility @default(PUBLIC)
+  onboardingStatus      OnboardingStatus  @default(NOT_STARTED)
+  onboardingStep        Int               @default(0)
+  onboardingCompletedAt DateTime?
+  travelStyle           String?
+  budgetMin             Int?
+  budgetMax             Int?
+  languages             String[]          @default([])
+  interests             String[]          @default([])
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  user                  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Destination {
@@ -432,30 +442,28 @@ model RefreshToken {
   @@index([retryUntil])
 }
 
-
 model EmailVerificationToken {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
-  tokenHash String   @unique
+  tokenHash String    @unique
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([expiresAt])
 }
 
-
 model OAuthAccount {
-  id                 String        @id @default(uuid())
-  userId             String
-  provider           OAuthProvider
-  providerAccountId  String
-  providerEmail      String
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
-  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String        @id @default(uuid())
+  userId            String
+  provider          OAuthProvider
+  providerAccountId String
+  providerEmail     String
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
   @@unique([userId, provider])

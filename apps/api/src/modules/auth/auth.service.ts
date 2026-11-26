@@ -593,6 +593,7 @@ private async createAndSendVerification(userId: string, email: string) {
         username: true, displayName: true, bio: true, avatarUrl: true,
         homeCity: true, homeState: true, homeCountry: true, visibility: true,
         travelStyle: true, budgetMin: true, budgetMax: true, languages: true, interests: true,
+        onboardingStatus: true, onboardingStep: true,
       } } },
     });
     if (!user) throw new UnauthorizedException("Account not found");

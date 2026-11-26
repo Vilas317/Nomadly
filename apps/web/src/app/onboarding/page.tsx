@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, Compass, Heart, Wallet, Languages, MapPin, Sparkles, LoaderCircle, SkipForward } from "lucide-react";
 import { apiFetch } from "@/lib/api-client";
+import { useAuth } from "@/context/auth-context";
 
 type Status = "NOT_STARTED" | "IN_PROGRESS" | "SKIPPED" | "COMPLETED";
 type Answers = {
@@ -38,6 +39,7 @@ function messageOf(value: unknown, fallback: string) {
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { user, loading: authLoading, refreshAuth } = useAuth();
   const [onboarding, setOnboarding] = useState<Onboarding | null>(null);
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Answers>(empty);
@@ -73,7 +75,14 @@ export default function OnboardingPage() {
     finally { setLoading(false); }
   }, [router]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+    void load();
+  }, [authLoading, user, load, router]);
 
   function toggle(list: string[], value: string, setter: (v: string[]) => void) {
     setter(list.includes(value) ? list.filter(x => x !== value) : [...list, value]);
@@ -118,6 +127,7 @@ export default function OnboardingPage() {
       const response = await apiFetch("/profiles/me/onboarding/complete", { method: "POST" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(messageOf(payload, "Unable to complete onboarding."));
+      await refreshAuth();
       router.replace("/profile");
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to complete onboarding."); }
     finally { setSaving(false); }
@@ -137,12 +147,13 @@ export default function OnboardingPage() {
       const response = await apiFetch("/profiles/me/onboarding/skip", { method: "POST" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(messageOf(payload, "Unable to skip onboarding."));
+      await refreshAuth();
       router.replace("/profile");
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to skip onboarding."); }
     finally { setSaving(false); }
   }
 
-  if (loading) return <div className="onboarding-loading"><LoaderCircle className="onboarding-spin" /> Preparing your travel profile…</div>;
+  if (authLoading || !user || loading) return <div className="onboarding-loading"><LoaderCircle className="onboarding-spin" /> Preparing your travel profile…</div>;
   if (!onboarding) return <main className="onboarding-shell"><div className="onboarding-error"><h1>We couldn't load onboarding.</h1><p>{error}</p><button className="button button-dark" onClick={() => void load()}>Try again</button></div></main>;
 
   const Icon = stages[step].icon;

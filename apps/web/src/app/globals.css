@@ -433,3 +433,28 @@ body{background:var(--paper);color:var(--ink);font-size:14px;letter-spacing:-.01
   .profile-form-footer .button { width: 100%; }
   .profile-private-note { align-self: flex-start; }
 }
+
+
+/* Stage 5.3: onboarding integration and profile progress */
+.profile-onboarding-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  padding: 24px 27px; border: 1px solid #e3eae1; border-radius: 18px;
+  background: linear-gradient(115deg, #f6f8f3, #fff);
+}
+.profile-onboarding-copy { min-width: 0; }
+.profile-onboarding-copy h2 {
+  margin: 7px 0 6px; color: var(--ink);
+  font: 500 clamp(22px, 2.5vw, 28px)/1.2 'Playfair Display', Georgia, serif;
+}
+.profile-onboarding-copy p { margin: 0; color: #718077; font-size: 11px; line-height: 1.7; }
+.profile-onboarding-copy p strong { color: #40584a; }
+.profile-onboarding-action { display: flex; align-items: flex-end; flex-direction: column; gap: 12px; flex: 0 0 auto; }
+.profile-onboarding-status {
+  padding: 6px 10px; border-radius: 30px; background: #f5f0e5;
+  color: #806b3c; font-size: 10px; font-weight: 700;
+}
+.profile-onboarding-status.is-complete { background: #edf5ed; color: #315f40; }
+@media(max-width:600px) {
+  .profile-onboarding-card { align-items: flex-start; flex-direction: column; padding: 21px; }
+  .profile-onboarding-action { align-items: flex-start; }
+}

@@ -25,6 +25,8 @@ type Profile = {
   budgetMax: number | null;
   languages: string[];
   interests: string[];
+  onboardingStatus: "NOT_STARTED" | "IN_PROGRESS" | "SKIPPED" | "COMPLETED";
+  onboardingStep: number;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -184,6 +186,16 @@ export default function ProfilePage() {
     }
   }
 
+  const optionalPreferenceCount = profile
+    ? [
+        profile.interests.length > 0,
+        profile.budgetMin != null || profile.budgetMax != null,
+        profile.languages.length > 0,
+        Boolean(profile.homeCity || profile.homeState || profile.homeCountry),
+      ].filter(Boolean).length
+    : 0;
+  const onboardingNeedsAttention = profile && profile.onboardingStatus !== "COMPLETED";
+
   const initials = (profile?.displayName || user?.profile?.displayName || "N")
     .trim().charAt(0).toUpperCase();
 
@@ -194,6 +206,29 @@ export default function ProfilePage() {
         <h1>Your story, in places.</h1>
         <p>A home for your travel interests, journeys and memories.</p>
       </section>
+
+      {profile && (
+        <section className="profile-onboarding-card" aria-label="Travel profile setup">
+          <div className="profile-onboarding-copy">
+            <span className="eyebrow">TRAVEL PROFILE SETUP</span>
+            <h2>{profile.onboardingStatus === "COMPLETED" ? "Your travel preferences are set." : "Make your travel profile more useful."}</h2>
+            <p>
+              <strong>Required:</strong> travel style {profile.travelStyle ? "is set" : "still needs to be chosen"}.
+              <span> Optional preferences: {optionalPreferenceCount} of 4 added (interests, budget, languages and home location).</span>
+            </p>
+          </div>
+          <div className="profile-onboarding-action">
+            <span className={`profile-onboarding-status ${profile.onboardingStatus === "COMPLETED" ? "is-complete" : ""}`}>
+              {profile.onboardingStatus === "COMPLETED" ? "Completed" : profile.onboardingStatus === "IN_PROGRESS" ? "In progress" : profile.onboardingStatus === "SKIPPED" ? "Skipped" : "Not started"}
+            </span>
+            {onboardingNeedsAttention && (
+              <a className="button button-dark" href="/onboarding">
+                {profile.onboardingStatus === "IN_PROGRESS" ? "Resume setup" : profile.onboardingStatus === "SKIPPED" ? "Set up preferences" : "Get started"}
+              </a>
+            )}
+          </div>
+        </section>
+      )}
 
       {error && (
         <div className="profile-alert profile-alert-error" role="alert">

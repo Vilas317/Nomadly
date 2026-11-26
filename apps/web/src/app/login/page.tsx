@@ -29,13 +29,15 @@ export default function LoginPage() {
       const response = await login(email, password);
       if (!response.ok) throw new Error("Email or password is incorrect.");
       const data = await response.json();
-      if (!(await refreshAuth())) throw new Error("Sign-in succeeded, but Nomadly could not load your session. Please try again.");
+      const currentUser = await refreshAuth();
+      if (!currentUser) throw new Error("Sign-in succeeded, but Nomadly could not load your session. Please try again.");
       if (data.user?.emailVerified === false) {
         setUnverified(true);
         setNotice("Your email address is not verified yet. You can still use Nomadly, but verifying it helps secure your account.");
         return;
       }
-      window.location.assign("/profile");
+      const status = currentUser.profile?.onboardingStatus;
+      window.location.assign(status === "NOT_STARTED" || status === "IN_PROGRESS" ? "/onboarding" : "/profile");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to sign in. Please try again.");
     } finally {

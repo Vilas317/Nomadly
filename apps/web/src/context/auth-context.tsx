@@ -7,13 +7,19 @@ export type AuthUser = {
   id: string;
   email: string;
   emailVerifiedAt?: string | null;
-  profile?: { username?: string; displayName?: string; avatarUrl?: string | null } | null;
+  profile?: {
+    username?: string;
+    displayName?: string;
+    avatarUrl?: string | null;
+    onboardingStatus?: "NOT_STARTED" | "IN_PROGRESS" | "SKIPPED" | "COMPLETED";
+    onboardingStep?: number;
+  } | null;
 };
 
 type AuthContextValue = {
   user: AuthUser | null;
   loading: boolean;
-  refreshAuth: () => Promise<boolean>;
+  refreshAuth: () => Promise<AuthUser | null>;
   signOut: () => Promise<void>;
 };
 
@@ -23,23 +29,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refreshAuth = useCallback(async (): Promise<boolean> => {
+  const refreshAuth = useCallback(async (): Promise<AuthUser | null> => {
     try {
       const response = await apiFetch("/auth/me", { method: "GET" });
       if (!response.ok) {
         setUser(null);
-        return false;
+        return null;
       }
       const data = await response.json() as { user?: AuthUser };
       if (!data.user?.id || !data.user.email) {
         setUser(null);
-        return false;
+        return null;
       }
       setUser(data.user);
-      return true;
+      return data.user;
     } catch {
       setUser(null);
-      return false;
+      return null;
     } finally {
       setLoading(false);
     }

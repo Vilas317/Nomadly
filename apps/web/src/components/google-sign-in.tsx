@@ -42,10 +42,12 @@ export function GoogleSignIn() {
             const body = await response.json().catch(() => ({}));
             throw new Error(body && typeof body.message === "string" ? body.message : "Google sign-in failed. Please try again.");
           }
-          if (!(await refreshAuth())) {
+          const currentUser = await refreshAuth();
+          if (!currentUser) {
             throw new Error("Google sign-in succeeded, but Nomadly could not load your session. Please try again.");
           }
-          window.location.assign("/profile");
+          const status = currentUser.profile?.onboardingStatus;
+          window.location.assign(status === "NOT_STARTED" || status === "IN_PROGRESS" ? "/onboarding" : "/profile");
         } catch (cause) {
           setError(cause instanceof Error ? cause.message : "Google sign-in failed. Please try again.");
           busyRef.current = false;

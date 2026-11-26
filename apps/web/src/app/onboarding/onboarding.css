@@ -1,0 +1,66 @@
+/* Nomadly onboarding — page-scoped styles. Existing globals.css remains untouched. */
+body:has(.onboarding-shell) .topbar,
+body:has(.onboarding-shell) .footer,
+body:has(.onboarding-shell) .mobile-bottom-nav { display: none !important; }
+.main-content:has(.onboarding-shell) { max-width: none; margin: 0; padding: 0; }
+.onboarding-shell { max-width: 980px; min-height: calc(100vh - 1px); margin: 0 auto; padding: 0 34px 54px; color: var(--ink,#18231f); }
+.onboarding-top { height: 76px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line,#e9eae5); }
+.onboarding-brand { font-size:23px; font-weight:700; letter-spacing:-1px; color:var(--green,#203f32); text-decoration:none; }
+.onboarding-brand span { color:var(--orange,#c77b52); }
+.onboarding-skip { display:inline-flex; align-items:center; gap:8px; border:0; background:transparent; color:#78857b; font-size:11px; font-weight:600; padding:10px; cursor:pointer; }
+.onboarding-skip:disabled,.onboarding-back:disabled { opacity:.45; cursor:not-allowed; }
+.onboarding-content { max-width:650px; margin:48px auto 0; }
+.onboarding-progress-meta { display:flex; justify-content:space-between; color:#87938a; font-size:9px; font-weight:700; letter-spacing:1.3px; }
+.onboarding-progress { height:4px; background:#e9ede7; border-radius:10px; margin-top:12px; overflow:hidden; }
+.onboarding-progress span { display:block; height:100%; background:#52745f; border-radius:10px; transition:width .25s ease; }
+.onboarding-heading { text-align:center; margin:45px auto 34px; }
+.onboarding-step-icon { width:52px; height:52px; border-radius:17px; background:#eaf0e9; color:#315a40; display:grid; place-items:center; margin:0 auto 18px; }
+.onboarding-heading .eyebrow { justify-content:center; }
+.onboarding-heading h1 { font:600 clamp(31px,5vw,43px)/1.12 'DM Sans',sans-serif; letter-spacing:-1.5px; margin:13px 0 10px; color:var(--ink,#18231f); }
+.onboarding-heading p { font-size:13px; line-height:1.7; color:#7b867e; margin:0; }
+.onboarding-choice-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.onboarding-choice { min-height:62px; padding:0 18px; border:1px solid #e5eae3; border-radius:14px; background:#fff; color:#53665a; display:flex; align-items:center; justify-content:space-between; text-align:left; font-size:12px; font-weight:600; cursor:pointer; transition:.18s; }
+.onboarding-choice:hover,.onboarding-chip:hover { border-color:#a9bbaa; transform:translateY(-1px); }
+.onboarding-choice.selected,.onboarding-chip.selected { border-color:#7f9a83; background:#edf4ed; color:#315a40; }
+.onboarding-selection-note { font-size:10px; color:#89948c; margin:0 0 13px; }
+.onboarding-chip-grid { display:flex; flex-wrap:wrap; gap:10px; }
+.onboarding-chip { min-height:42px; display:inline-flex; align-items:center; gap:7px; padding:0 15px; border:1px solid #e5eae3; border-radius:30px; background:#fff; color:#66746a; font-size:11px; font-weight:600; cursor:pointer; transition:.18s; }
+.onboarding-budget { display:grid; grid-template-columns:1fr 1fr; gap:15px; }
+.onboarding-budget label,.onboarding-location-grid label { display:flex; flex-direction:column; gap:9px; color:#52665a; font-size:11px; font-weight:600; }
+.onboarding-budget input,.onboarding-location-grid input,.onboarding-custom-language input { width:100%; min-height:49px; padding:12px 14px; border:1px solid #e2e8e0; border-radius:11px; background:#fff; color:#203f32; -webkit-text-fill-color:#203f32; font:400 13px 'DM Sans',sans-serif; outline:none; color-scheme:light; }
+.onboarding-budget input:focus,.onboarding-location-grid input:focus,.onboarding-custom-language input:focus { border-color:#789681; box-shadow:0 0 0 4px rgba(102,131,109,.12); }
+.onboarding-budget>p { grid-column:1/-1; color:#89948c; font-size:10px; margin:0; }
+.onboarding-custom-language { display:flex; gap:9px; margin-top:20px; }
+.onboarding-custom-language input { flex:1; min-width:0; }
+.onboarding-custom-language button { padding:0 18px; border:0; border-radius:25px; background:#eaf0e9; color:#315a40; font-weight:700; font-size:11px; cursor:pointer; }
+.onboarding-location-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.onboarding-location-grid .full { grid-column:1/-1; }
+.onboarding-review { border:1px solid #e8ece6; border-radius:17px; background:#fff; padding:4px 20px; }
+.onboarding-review>div { display:grid; grid-template-columns:125px 1fr; gap:15px; padding:15px 0; border-bottom:1px solid #edf0eb; }
+.onboarding-review>div:last-child { border-bottom:0; }
+.onboarding-review span { color:#87938a; font-size:10px; }
+.onboarding-review strong { color:#40584a; font-size:11px; line-height:1.6; font-weight:600; overflow-wrap:anywhere; }
+.onboarding-footer { display:flex; align-items:center; justify-content:space-between; gap:15px; margin-top:38px; padding-top:22px; border-top:1px solid var(--line,#e9eae5); }
+.onboarding-back { display:inline-flex; align-items:center; gap:8px; padding:12px 5px; border:0; background:transparent; color:#68766c; font-size:11px; font-weight:600; cursor:pointer; }
+.onboarding-next { min-width:150px; min-height:46px; }
+.onboarding-reassurance { text-align:center; color:#929b93; font-size:10px; line-height:1.6; margin:22px 0 0; }
+.onboarding-error-message { margin:20px 0 0; padding:12px 14px; border-radius:11px; background:#fbefed; color:#9d3933; font-size:11px; line-height:1.6; }
+.onboarding-loading { min-height:65vh; display:flex; align-items:center; justify-content:center; gap:10px; color:#75817a; font-size:12px; }
+.onboarding-spin { animation:onboarding-spin 1s linear infinite; }
+@keyframes onboarding-spin { to { transform:rotate(360deg); } }
+.onboarding-error { max-width:600px; margin:70px auto; padding:40px 20px; text-align:center; }
+.onboarding-error h1 { font-size:30px; }
+.onboarding-error p { color:#9d3933; font-size:12px; }
+@media(max-width:600px) {
+ .onboarding-shell { padding:0 18px 42px; }
+ .onboarding-content { margin-top:34px; }
+ .onboarding-heading { margin:35px auto 26px; }
+ .onboarding-heading h1 { font-size:31px; }
+ .onboarding-choice-grid { grid-template-columns:1fr; gap:9px; }
+ .onboarding-choice { min-height:55px; }
+ .onboarding-budget,.onboarding-location-grid { grid-template-columns:1fr; }
+ .onboarding-location-grid .full { grid-column:auto; }
+ .onboarding-review { padding:4px 14px; }
+ .onboarding-review>div { grid-template-columns:90px 1fr; gap:10px; }
+ .onboarding-footer { margin-top:28px; }
+}

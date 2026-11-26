@@ -266,6 +266,7 @@ export class ProfilesService {
       where: { userId },
       data: {
         onboardingStatus: OnboardingStatus.SKIPPED,
+        onboardingStep: 0,
         onboardingCompletedAt: null,
       },
     });

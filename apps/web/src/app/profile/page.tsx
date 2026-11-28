@@ -1,5 +1,6 @@
 "use client";
 
+import { ProfileAvatarControl } from "@/components/profile-avatar-control";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   Camera, Globe2, MapPin, Settings, UserRound, LoaderCircle, Check,
@@ -244,11 +245,17 @@ export default function ProfilePage() {
       <section className="profile-card">
         <div className="profile-cover" />
         <div className="profile-main">
-          <div className="profile-avatar">
-            {profile?.avatarUrl
-              ? <img src={profile.avatarUrl} alt="" />
-              : <span>{initials || <UserRound size={30} />}</span>}
-          </div>
+          {profile && (
+  <ProfileAvatarControl
+    avatarUrl={profile.avatarUrl}
+    initials={initials}
+    onAvatarChange={(avatarUrl) =>
+      setProfile((current) =>
+        current ? { ...current, avatarUrl } : current
+      )
+    }
+  />
+)}
           <div className="profile-actions">
             {!editing ? (
               <button className="button button-outline" onClick={() => { setEditing(true); setSuccess(""); }} disabled={loading || !profile}>

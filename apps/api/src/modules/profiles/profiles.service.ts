@@ -13,6 +13,7 @@ import { randomBytes } from "node:crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UpdateProfileDto } from "./dto/update-profile.dto";
 import { OnboardingProgressDto } from "./dto/onboarding-progress.dto";
+import { AvatarStorageService } from "./avatar-storage.service";
 
 const profileSelect = {
   id: true,
@@ -39,119 +40,114 @@ const profileSelect = {
 
 @Injectable()
 export class ProfilesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly avatarStorage: AvatarStorageService,
+  ) {}
 
   async getMyProfile(userId: string) {
     return this.ensureProfile(userId);
   }
 
-  async updateMyProfile(userId: string, input: UpdateProfileDto) {
-    // Ensure older or inconsistent accounts receive a profile before updates.
+  async uploadMyAvatar(userId: string, file: { buffer: Buffer; mimetype: string; size: number }) {
     const existing = await this.ensureProfile(userId);
+    let uploaded: { secure_url: string; public_id: string };
 
-    const data: Prisma.ProfileUpdateInput = {};
-
-    if (input.username !== undefined) {
-      data.username = input.username.trim().toLowerCase();
-    }
-
-    if (input.displayName !== undefined) {
-      const displayName = input.displayName.trim();
-
-      if (!displayName) {
-        throw new BadRequestException("Display name cannot be empty");
+    try {
+      uploaded = await this.avatarStorage.upload(userId, file);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.includes("valid JPEG") || message.includes("5 MB") || message.includes("image")) {
+        throw new BadRequestException(message);
       }
-
-      data.displayName = displayName;
-    }
-
-    if (input.bio !== undefined) {
-      data.bio = input.bio === null ? null : input.bio.trim() || null;
-    }
-
-    if (input.homeCity !== undefined) {
-      data.homeCity =
-        input.homeCity === null ? null : input.homeCity.trim() || null;
-    }
-
-    if (input.homeState !== undefined) {
-      data.homeState =
-        input.homeState === null ? null : input.homeState.trim() || null;
-    }
-
-    if (input.homeCountry !== undefined) {
-      data.homeCountry =
-        input.homeCountry === null ? null : input.homeCountry.trim() || null;
-    }
-
-    if (input.travelStyle !== undefined) {
-      data.travelStyle =
-        input.travelStyle === null ? null : input.travelStyle.trim() || null;
-    }
-
-    if (input.budgetMin !== undefined) {
-      data.budgetMin = input.budgetMin;
-    }
-
-    if (input.budgetMax !== undefined) {
-      data.budgetMax = input.budgetMax;
-    }
-
-    const nextBudgetMin =
-      input.budgetMin === undefined ? existing.budgetMin : input.budgetMin;
-
-    const nextBudgetMax =
-      input.budgetMax === undefined ? existing.budgetMax : input.budgetMax;
-
-    if (
-      nextBudgetMin !== null &&
-      nextBudgetMin !== undefined &&
-      nextBudgetMax !== null &&
-      nextBudgetMax !== undefined &&
-      nextBudgetMin > nextBudgetMax
-    ) {
-      throw new BadRequestException(
-        "Minimum budget cannot exceed maximum budget",
-      );
-    }
-
-    if (input.languages !== undefined) {
-      data.languages = this.normalizeList(input.languages);
-    }
-
-    if (input.interests !== undefined) {
-      data.interests = this.normalizeList(input.interests);
-    }
-
-    if (input.visibility !== undefined) {
-      data.visibility = input.visibility as ProfileVisibility;
-    }
-
-    if (Object.keys(data).length === 0) {
-      return existing;
+      throw error;
     }
 
     try {
-      return await this.prisma.profile.update({
+      const updated = await this.prisma.profile.update({
         where: { userId },
-        data,
+        data: { avatarUrl: uploaded.secure_url },
         select: profileSelect,
       });
+
+      // Replace only an asset in this user's dedicated Cloudinary folder.
+      const previousPublicId = this.getOwnedAvatarPublicId(existing.avatarUrl, userId);
+      if (previousPublicId && previousPublicId !== uploaded.public_id) {
+        try { await this.avatarStorage.delete(previousPublicId); } catch {
+          // A cleanup failure leaves an orphan, not a broken profile image.
+        }
+      }
+      return updated;
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      ) {
+      try { await this.avatarStorage.delete(uploaded.public_id); } catch {
+        // Preserve the original database error.
+      }
+      throw error;
+    }
+  }
+
+  async deleteMyAvatar(userId: string) {
+    const existing = await this.ensureProfile(userId);
+    if (!existing.avatarUrl) return existing;
+
+    const updated = await this.prisma.profile.update({
+      where: { userId },
+      data: { avatarUrl: null },
+      select: profileSelect,
+    });
+
+    const publicId = this.getOwnedAvatarPublicId(existing.avatarUrl, userId);
+    if (publicId) {
+      try { await this.avatarStorage.delete(publicId); } catch {
+        // The profile no longer references the asset; cleanup can be retried.
+      }
+    }
+    return updated;
+  }
+
+  async updateMyProfile(userId: string, input: UpdateProfileDto) {
+    const existing = await this.ensureProfile(userId);
+    const data: Prisma.ProfileUpdateInput = {};
+
+    if (input.username !== undefined) data.username = input.username.trim().toLowerCase();
+
+    if (input.displayName !== undefined) {
+      const displayName = input.displayName.trim();
+      if (!displayName) throw new BadRequestException("Display name cannot be empty");
+      data.displayName = displayName;
+    }
+
+    if (input.bio !== undefined) data.bio = input.bio === null ? null : input.bio.trim() || null;
+    if (input.homeCity !== undefined) data.homeCity = input.homeCity === null ? null : input.homeCity.trim() || null;
+    if (input.homeState !== undefined) data.homeState = input.homeState === null ? null : input.homeState.trim() || null;
+    if (input.homeCountry !== undefined) data.homeCountry = input.homeCountry === null ? null : input.homeCountry.trim() || null;
+    if (input.travelStyle !== undefined) data.travelStyle = input.travelStyle === null ? null : input.travelStyle.trim() || null;
+    if (input.budgetMin !== undefined) data.budgetMin = input.budgetMin;
+    if (input.budgetMax !== undefined) data.budgetMax = input.budgetMax;
+
+    const nextBudgetMin = input.budgetMin === undefined ? existing.budgetMin : input.budgetMin;
+    const nextBudgetMax = input.budgetMax === undefined ? existing.budgetMax : input.budgetMax;
+    if (nextBudgetMin != null && nextBudgetMax != null && nextBudgetMin > nextBudgetMax) {
+      throw new BadRequestException("Minimum budget cannot exceed maximum budget");
+    }
+
+    if (input.languages !== undefined) data.languages = this.normalizeList(input.languages);
+    if (input.interests !== undefined) data.interests = this.normalizeList(input.interests);
+    if (input.visibility !== undefined) data.visibility = input.visibility as ProfileVisibility;
+    if (Object.keys(data).length === 0) return existing;
+
+    try {
+      return await this.prisma.profile.update({ where: { userId }, data, select: profileSelect });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         throw new ConflictException("That username is already taken");
       }
-
       throw error;
     }
   }
 
   async getMyOnboarding(userId: string) {
     const profile = await this.ensureProfile(userId);
-
     return {
       status: profile.onboardingStatus,
       currentStep: profile.onboardingStep,
@@ -169,99 +165,41 @@ export class ProfilesService {
     };
   }
 
-  async saveOnboardingProgress(
-    userId: string,
-    input: OnboardingProgressDto,
-  ) {
+  async saveOnboardingProgress(userId: string, input: OnboardingProgressDto) {
     const existing = await this.ensureProfile(userId);
-
     const data: Prisma.ProfileUpdateInput = {};
 
-    // A completed onboarding always remains on the final step.
-    if (
-      input.step !== undefined &&
-      existing.onboardingStatus !== OnboardingStatus.COMPLETED
-    ) {
+    if (input.step !== undefined && existing.onboardingStatus !== OnboardingStatus.COMPLETED) {
       data.onboardingStep = input.step;
     }
+    if (input.travelStyle !== undefined) data.travelStyle = input.travelStyle === null ? null : input.travelStyle.trim() || null;
+    if (input.interests !== undefined) data.interests = this.normalizeList(input.interests);
+    if (input.languages !== undefined) data.languages = this.normalizeList(input.languages);
+    if (input.budgetMin !== undefined) data.budgetMin = input.budgetMin;
+    if (input.budgetMax !== undefined) data.budgetMax = input.budgetMax;
+    if (input.homeCity !== undefined) data.homeCity = input.homeCity === null ? null : input.homeCity.trim() || null;
+    if (input.homeState !== undefined) data.homeState = input.homeState === null ? null : input.homeState.trim() || null;
+    if (input.homeCountry !== undefined) data.homeCountry = input.homeCountry === null ? null : input.homeCountry.trim() || null;
 
-    if (input.travelStyle !== undefined) {
-      data.travelStyle =
-        input.travelStyle === null ? null : input.travelStyle.trim() || null;
+    const nextBudgetMin = input.budgetMin === undefined ? existing.budgetMin : input.budgetMin;
+    const nextBudgetMax = input.budgetMax === undefined ? existing.budgetMax : input.budgetMax;
+    if (nextBudgetMin != null && nextBudgetMax != null && nextBudgetMin > nextBudgetMax) {
+      throw new BadRequestException("Minimum budget cannot exceed maximum budget");
     }
 
-    if (input.interests !== undefined) {
-      data.interests = this.normalizeList(input.interests);
-    }
-
-    if (input.languages !== undefined) {
-      data.languages = this.normalizeList(input.languages);
-    }
-
-    if (input.budgetMin !== undefined) {
-      data.budgetMin = input.budgetMin;
-    }
-
-    if (input.budgetMax !== undefined) {
-      data.budgetMax = input.budgetMax;
-    }
-
-    if (input.homeCity !== undefined) {
-      data.homeCity =
-        input.homeCity === null ? null : input.homeCity.trim() || null;
-    }
-
-    if (input.homeState !== undefined) {
-      data.homeState =
-        input.homeState === null ? null : input.homeState.trim() || null;
-    }
-
-    if (input.homeCountry !== undefined) {
-      data.homeCountry =
-        input.homeCountry === null ? null : input.homeCountry.trim() || null;
-    }
-
-    const nextBudgetMin =
-      input.budgetMin === undefined ? existing.budgetMin : input.budgetMin;
-
-    const nextBudgetMax =
-      input.budgetMax === undefined ? existing.budgetMax : input.budgetMax;
-
-    if (
-      nextBudgetMin !== null &&
-      nextBudgetMin !== undefined &&
-      nextBudgetMax !== null &&
-      nextBudgetMax !== undefined &&
-      nextBudgetMin > nextBudgetMax
-    ) {
-      throw new BadRequestException(
-        "Minimum budget cannot exceed maximum budget",
-      );
-    }
-
-    if (Object.keys(data).length === 0) {
-      return this.getMyOnboarding(userId);
-    }
-
+    if (Object.keys(data).length === 0) return this.getMyOnboarding(userId);
     if (existing.onboardingStatus !== OnboardingStatus.COMPLETED) {
       data.onboardingStatus = OnboardingStatus.IN_PROGRESS;
     }
-
-    await this.prisma.profile.update({
-      where: { userId },
-      data,
-    });
-
+    await this.prisma.profile.update({ where: { userId }, data });
     return this.getMyOnboarding(userId);
   }
 
   async skipOnboarding(userId: string) {
     const existing = await this.ensureProfile(userId);
-
     if (existing.onboardingStatus === OnboardingStatus.COMPLETED) {
       throw new ConflictException("Completed onboarding cannot be skipped");
     }
-
     await this.prisma.profile.update({
       where: { userId },
       data: {
@@ -270,15 +208,11 @@ export class ProfilesService {
         onboardingCompletedAt: null,
       },
     });
-
     return this.getMyOnboarding(userId);
   }
 
   async completeOnboarding(userId: string) {
     const existing = await this.ensureProfile(userId);
-
-    // Keep completion idempotent: repeated calls must not change the original
-    // completion timestamp or move an already completed profile backwards.
     if (existing.onboardingStatus !== OnboardingStatus.COMPLETED) {
       await this.prisma.profile.update({
         where: { userId },
@@ -289,97 +223,66 @@ export class ProfilesService {
         },
       });
     } else if (existing.onboardingStep !== 6) {
-      // Repair any legacy/inconsistent completed profile defensively.
-      await this.prisma.profile.update({
-        where: { userId },
-        data: { onboardingStep: 6 },
-      });
+      await this.prisma.profile.update({ where: { userId }, data: { onboardingStep: 6 } });
     }
-
     return this.getMyOnboarding(userId);
   }
 
-  /**
-   * Returns the user's profile, creating one only when it is missing.
-   * The unique userId upsert makes concurrent first requests safe: only one
-   * profile is created, and subsequent requests return that same profile.
-   */
+  private getOwnedAvatarPublicId(avatarUrl: string | null, userId: string): string | null {
+    if (!avatarUrl) return null;
+    try {
+      const url = new URL(avatarUrl);
+      if (url.hostname !== "res.cloudinary.com") return null;
+      const marker = "/image/upload/";
+      const markerIndex = url.pathname.indexOf(marker);
+      if (markerIndex < 0) return null;
+      let publicId = url.pathname.slice(markerIndex + marker.length);
+      publicId = publicId.replace(/^v\d+\//, "");
+      publicId = decodeURIComponent(publicId).replace(/\.[a-z0-9]+$/i, "");
+      return publicId.startsWith(`nomadly/avatars/${userId}/`) ? publicId : null;
+    } catch {
+      return null;
+    }
+  }
+
   private async ensureProfile(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        profile: { select: { id: true } },
-      },
+      select: { id: true, email: true, profile: { select: { id: true } } },
     });
-
-    if (!user) {
-      throw new NotFoundException("User not found");
-    }
-
+    if (!user) throw new NotFoundException("User not found");
     if (user.profile) {
-      return this.prisma.profile.findUniqueOrThrow({
-        where: { userId },
-        select: profileSelect,
-      });
+      return this.prisma.profile.findUniqueOrThrow({ where: { userId }, select: profileSelect });
     }
 
     const emailPrefix = user.email.split("@")[0] ?? "";
-
-    const base =
-      emailPrefix
-        .toLowerCase()
-        .replace(/[^a-z0-9_]/g, "_")
-        .replace(/^_+|_+$/g, "")
-        .slice(0, 10) || "traveller";
-
-    // 12 hex characters keep the generated username within the 24-char limit.
+    const base = emailPrefix.toLowerCase().replace(/[^a-z0-9_]/g, "_").replace(/^_+|_+$/g, "").slice(0, 10) || "traveller";
     const username = `${base}_${randomBytes(6).toString("hex")}`.slice(0, 24);
-
-    const displayName =
-      emailPrefix.replace(/[._-]+/g, " ").trim().slice(0, 80) || "Traveller";
+    const displayName = emailPrefix.replace(/[._-]+/g, " ").trim().slice(0, 80) || "Traveller";
 
     try {
       return await this.prisma.profile.upsert({
         where: { userId },
-        create: {
-          userId,
-          username,
-          displayName,
-        },
+        create: { userId, username, displayName },
         update: {},
         select: profileSelect,
       });
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      ) {
-        throw new ConflictException(
-          "Could not generate a unique profile username. Please retry.",
-        );
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new ConflictException("Could not generate a unique profile username. Please retry.");
       }
-
       throw error;
     }
   }
 
   private normalizeList(values: string[]) {
     const unique = new Map<string, string>();
-
     for (const raw of values) {
       const value = raw.trim();
-
       if (!value) continue;
-
       const key = value.toLocaleLowerCase();
-
-      if (!unique.has(key)) {
-        unique.set(key, value);
-      }
+      if (!unique.has(key)) unique.set(key, value);
     }
-
     return [...unique.values()];
   }
 }
